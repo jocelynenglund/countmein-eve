@@ -16,3 +16,6 @@ public record TurnedAwayAtDoor(string CheckId, string PersonId, DateTimeOffset A
 
 /// <summary>The last ten minutes of the entry window began: spots nobody claimed went to the waitlist.</summary>
 public record UnclaimedSpotsReleased(string CheckId, DateTimeOffset At, string[] LostTheirSpot, string[] LetIn);
+
+/// <summary>The owner chose (or changed) where it happens, and when the people who are in get to know.</summary>
+public record VenueSet(string CheckId, string Venue, DateTimeOffset RevealAt, DateTimeOffset At);

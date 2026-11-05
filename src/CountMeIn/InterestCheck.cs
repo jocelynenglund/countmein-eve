@@ -13,6 +13,8 @@ public class InterestCheck
     /// <summary>Everyone counted in, in sign-up order. The first Capacity of them hold a spot; the rest are waitlisted.</summary>
     public List<string> PeopleIn { get; set; } = [];
 
+    public string? Venue { get; set; }
+    public DateTimeOffset? RevealAt { get; set; }
     public bool Released { get; set; }
     public HashSet<string> LostTheirSpot { get; set; } = [];
     public HashSet<string> LetIn { get; set; } = [];
@@ -24,6 +26,12 @@ public class InterestCheck
     public void Apply(InterestShown e) => PeopleIn.Add(e.PersonId);
     public void Apply(InterestWithdrawn e) { PeopleIn.Remove(e.PersonId); CheckedIn.Remove(e.PersonId); }
     public void Apply(CheckedIn e) => CheckedIn.Add(e.PersonId);
+
+    public void Apply(VenueSet e) { Venue = e.Venue; RevealAt = e.RevealAt; }
+
+    /// <summary>Counted in, and holding a spot or let in from the waitlist.</summary>
+    public bool HoldsSpot(string personId) =>
+        PeopleIn.Contains(personId) && !LostTheirSpot.Contains(personId) && !IsWaitlisted(personId);
 
     public void Apply(TurnedAwayAtDoor e) { if (!TriedAtDoor.Contains(e.PersonId)) TriedAtDoor.Add(e.PersonId); }
     public void Apply(UnclaimedSpotsReleased e)
