@@ -13,3 +13,6 @@ public record CheckedIn(string CheckId, string PersonId, DateTimeOffset At);
 
 /// <summary>A waitlisted person showed up at the door. A fact the owner wants to see, even though the person was refused.</summary>
 public record TurnedAwayAtDoor(string CheckId, string PersonId, DateTimeOffset At);
+
+/// <summary>The last ten minutes of the entry window began: spots nobody claimed went to the waitlist.</summary>
+public record UnclaimedSpotsReleased(string CheckId, DateTimeOffset At, string[] LostTheirSpot, string[] LetIn);
