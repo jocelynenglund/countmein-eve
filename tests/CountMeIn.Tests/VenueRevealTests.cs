@@ -14,9 +14,9 @@ public class VenueRevealTests
         VenueEndpoint.Reveal(Fold.Of<InterestCheck>(given)!, personId, now);
 
     [Fact]
-    public void Before_the_reveal_nobody_sees_it()
+    public void Before_the_early_bird_hour_nobody_sees_it()
     {
-        var answer = Ask("p1", RevealAt.AddMinutes(-1), Started(capacity: 2), Shown("p1", "Ana"), Venue);
+        var answer = Ask("p1", RevealAt.AddHours(-2), Started(capacity: 2), Shown("p1", "Ana"), Venue);
         answer.Venue.ShouldBeNull();
         answer.RevealAt.ShouldBe(RevealAt);
     }
@@ -55,4 +55,31 @@ public class VenueRevealTests
     [Fact]
     public void Someone_who_never_counted_in_does_not_see_it() =>
         Ask("p9", After, Started(capacity: 2), Shown("p1", "Ana"), Venue).Venue.ShouldBeNull();
+
+    static readonly DateTimeOffset EarlyBirdTime = RevealAt.AddHours(-1);
+
+    [Fact]
+    public void Early_birds_see_it_an_hour_before_the_reveal() =>
+        Ask("p1", EarlyBirdTime, Started(capacity: 2), Shown("p1", "Ana"), Venue).Venue.ShouldBe("The Library, Main St 4");
+
+    [Fact]
+    public void Not_before_that_hour() =>
+        Ask("p1", EarlyBirdTime.AddSeconds(-1), Started(capacity: 2), Shown("p1", "Ana"), Venue).Venue.ShouldBeNull();
+
+    [Fact]
+    public void Someone_who_changed_their_mind_and_came_back_is_not_an_early_bird_even_if_they_hold_a_spot()
+    {
+        object[] given = [Started(capacity: 2), Shown("p1", "Ana"), Withdrawn("p1"), Shown("p1", "Ana"), Venue];
+        Ask("p1", EarlyBirdTime, given).Venue.ShouldBeNull();
+        Ask("p1", RevealAt, given).Venue.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void Someone_let_in_from_the_waitlist_who_never_changed_their_mind_is_an_early_bird() =>
+        Ask("p2", EarlyBirdTime, Started(capacity: 1), Shown("p1", "Ana"), Shown("p2", "Ben"),
+            new UnclaimedSpotsReleased("c1", RevealAt.AddHours(-2), ["p1"], ["p2"]), Venue).Venue.ShouldNotBeNull();
+
+    [Fact]
+    public void The_waitlisted_are_not_early_birds() =>
+        Ask("p2", EarlyBirdTime, Started(capacity: 1), Shown("p1", "Ana"), Shown("p2", "Ben"), Venue).Venue.ShouldBeNull();
 }
