@@ -216,4 +216,34 @@ public class ApiTests : IAsyncLifetime
         var door = await WaitForRelease("c6");
         door.ShouldContain("\"letInFromWaitlist\":[\"Ben\"]");
     }
+
+    [Fact]
+    public async Task The_venue_is_revealed_only_to_those_who_hold_a_spot_when_the_time_comes()
+    {
+        await _host.Scenario(s => { s.Post.Json(new { checkId = "c7", title = "x", goal = 1, ownerKey = "secret", on = "2026-11-04", capacity = 1 }).ToUrl("/checks"); s.StatusCodeShouldBe(201); });
+        await CountIn("c7", "p1", "Ana");
+        await CountIn("c7", "p2", "Ben");   // waitlisted
+
+        var revealAt = DateTimeOffset.UtcNow.AddSeconds(3);
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new { checkId = "c7", ownerKey = "secret", venue = "The Library", revealAt = Iso(revealAt), at = Iso(DateTimeOffset.UtcNow) })
+                .ToUrl("/checks/c7/venue");
+            s.StatusCodeShouldBe(204);
+        });
+
+        Task<string> Ask(string person) => _host.Scenario(s => s.Get.Url($"/checks/c7/venue?personId={person}")).ContinueWith(t => t.Result.ReadAsText());
+        (await Ask("p1")).ShouldNotContain("The Library");   // before the reveal nobody sees it
+        await Task.Delay(4000);
+        (await Ask("p1")).ShouldContain("The Library");
+        (await Ask("p2")).ShouldNotContain("The Library");
+
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new { checkId = "c7", ownerKey = "secret", venue = "Elsewhere", revealAt = Iso(revealAt), at = Iso(DateTimeOffset.UtcNow) })
+                .ToUrl("/checks/c7/venue");
+            s.StatusCodeShouldBe(409);
+        });
+        (await DoorList("c7")).ShouldContain("\"venue\":\"The Library\"");
+    }
 }

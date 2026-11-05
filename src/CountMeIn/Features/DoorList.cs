@@ -17,6 +17,8 @@ public class DoorList
     public List<Arrival> CheckedIn { get; set; } = [];
     public List<Arrival> TurnedAway { get; set; } = [];
 
+    public string? Venue { get; set; }
+    public DateTimeOffset? RevealAt { get; set; }
     public List<string> LostTheirSpotIds { get; set; } = [];
     public List<string> LetInIds { get; set; } = [];
     public List<string> LostTheirSpot { get; set; } = [];
@@ -47,6 +49,8 @@ public class DoorList
         CheckedIn.Add(new Arrival(person.Name, e.At));
     }
 
+    public void Apply(VenueSet e) { Venue = e.Venue; RevealAt = e.RevealAt; }
+
     public void Apply(UnclaimedSpotsReleased e)
     {
         LostTheirSpotIds.AddRange(e.LostTheirSpot);
@@ -63,7 +67,8 @@ public class DoorList
 
 public record DoorListResponse(IReadOnlyList<Arrival> CheckedIn, IReadOnlyList<string> NotArrivedYet,
     IReadOnlyList<string> Waitlist, IReadOnlyList<Arrival> TurnedAway,
-    IReadOnlyList<string> LetInFromWaitlist, IReadOnlyList<string> LostTheirSpot);
+    IReadOnlyList<string> LetInFromWaitlist, IReadOnlyList<string> LostTheirSpot,
+    string? Venue, DateTimeOffset? RevealAt);
 
 public static class DoorListEndpoint
 {
@@ -72,6 +77,6 @@ public static class DoorListEndpoint
     {
         if (!OwnerKey.Matches(ownerKey, view.OwnerKeyHash)) throw new Refusal("Only the owner can see this", 403);
         return new DoorListResponse(view.CheckedIn, view.NotArrivedYet, view.Waitlist, view.TurnedAway,
-            view.LetInFromWaitlist, view.LostTheirSpot);
+            view.LetInFromWaitlist, view.LostTheirSpot, view.Venue, view.RevealAt);
     }
 }
