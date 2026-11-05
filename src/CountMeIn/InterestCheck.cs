@@ -13,6 +13,8 @@ public class InterestCheck
     /// <summary>Everyone counted in, in sign-up order. The first Capacity of them hold a spot; the rest are waitlisted.</summary>
     public List<string> PeopleIn { get; set; } = [];
 
+    /// <summary>Everyone who ever used Change My Mind, even if they counted back in.</summary>
+    public HashSet<string> ChangedMind { get; set; } = [];
     public string? Venue { get; set; }
     public DateTimeOffset? RevealAt { get; set; }
     public bool Released { get; set; }
@@ -24,7 +26,7 @@ public class InterestCheck
     public static InterestCheck Create(InterestCheckStarted e) =>
         new() { Id = e.CheckId, OwnerKeyHash = e.OwnerKeyHash, Capacity = e.Capacity, DoorsOpen = e.DoorsOpen, DoorsClose = e.DoorsClose };
     public void Apply(InterestShown e) => PeopleIn.Add(e.PersonId);
-    public void Apply(InterestWithdrawn e) { PeopleIn.Remove(e.PersonId); CheckedIn.Remove(e.PersonId); }
+    public void Apply(InterestWithdrawn e) { PeopleIn.Remove(e.PersonId); CheckedIn.Remove(e.PersonId); ChangedMind.Add(e.PersonId); }
     public void Apply(CheckedIn e) => CheckedIn.Add(e.PersonId);
 
     public void Apply(VenueSet e) { Venue = e.Venue; RevealAt = e.RevealAt; }

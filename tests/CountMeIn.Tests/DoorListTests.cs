@@ -59,4 +59,12 @@ public class DoorListTests
         view.Venue.ShouldBe("The Library");
         view.RevealAt.ShouldBe(revealAt);
     }
+
+    [Fact]
+    public void The_door_list_shows_the_early_birds()
+    {
+        var view = Fold.Of<DoorList>(Started(capacity: 2),
+            Shown("p1", "Ana"), Shown("p2", "Ben"), Withdrawn("p2"), Shown("p2", "Ben"), Shown("p3", "Dev"))!;
+        view.EarlyBirds.ShouldBe(["Ana"]);   // Ben came back (changed his mind once), Dev is waitlisted
+    }
 }

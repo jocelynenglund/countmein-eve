@@ -17,6 +17,7 @@ public class DoorList
     public List<Arrival> CheckedIn { get; set; } = [];
     public List<Arrival> TurnedAway { get; set; } = [];
 
+    public List<string> ChangedMindIds { get; set; } = [];
     public string? Venue { get; set; }
     public DateTimeOffset? RevealAt { get; set; }
     public List<string> LostTheirSpotIds { get; set; } = [];
@@ -29,6 +30,9 @@ public class DoorList
     int InLineSlots => (Capacity ?? int.MaxValue) - LostTheirSpotIds.Count;
     public List<string> NotArrivedYet => People.Where(p => LetInIds.Contains(p.PersonId))
         .Concat(InLine.Take(InLineSlots)).Where(p => !Arrived.Contains(p.PersonId)).Select(p => p.Name).ToList();
+    /// <summary>Spot holders who never changed their mind: they see the venue an hour early.</summary>
+    public List<string> EarlyBirds => People.Where(p => LetInIds.Contains(p.PersonId))
+        .Concat(InLine.Take(InLineSlots)).Where(p => !ChangedMindIds.Contains(p.PersonId)).Select(p => p.Name).ToList();
     public List<string> Waitlist => InLine.Skip(InLineSlots).Select(p => p.Name).ToList();
 
     public static DoorList Create(InterestCheckStarted e) => new() { Id = e.CheckId, OwnerKeyHash = e.OwnerKeyHash, Capacity = e.Capacity };
@@ -37,6 +41,7 @@ public class DoorList
 
     public void Apply(InterestWithdrawn e)
     {
+        if (!ChangedMindIds.Contains(e.PersonId)) ChangedMindIds.Add(e.PersonId);
         var name = People.FirstOrDefault(p => p.PersonId == e.PersonId)?.Name;
         People.RemoveAll(p => p.PersonId == e.PersonId);
         if (Arrived.Remove(e.PersonId)) CheckedIn.RemoveAll(a => a.Name == name);
@@ -68,7 +73,7 @@ public class DoorList
 public record DoorListResponse(IReadOnlyList<Arrival> CheckedIn, IReadOnlyList<string> NotArrivedYet,
     IReadOnlyList<string> Waitlist, IReadOnlyList<Arrival> TurnedAway,
     IReadOnlyList<string> LetInFromWaitlist, IReadOnlyList<string> LostTheirSpot,
-    string? Venue, DateTimeOffset? RevealAt);
+    string? Venue, DateTimeOffset? RevealAt, IReadOnlyList<string> EarlyBirds);
 
 public static class DoorListEndpoint
 {
@@ -77,6 +82,6 @@ public static class DoorListEndpoint
     {
         if (!OwnerKey.Matches(ownerKey, view.OwnerKeyHash)) throw new Refusal("Only the owner can see this", 403);
         return new DoorListResponse(view.CheckedIn, view.NotArrivedYet, view.Waitlist, view.TurnedAway,
-            view.LetInFromWaitlist, view.LostTheirSpot, view.Venue, view.RevealAt);
+            view.LetInFromWaitlist, view.LostTheirSpot, view.Venue, view.RevealAt, view.EarlyBirds);
     }
 }

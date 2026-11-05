@@ -224,7 +224,7 @@ public class ApiTests : IAsyncLifetime
         await CountIn("c7", "p1", "Ana");
         await CountIn("c7", "p2", "Ben");   // waitlisted
 
-        var revealAt = DateTimeOffset.UtcNow.AddSeconds(3);
+        var revealAt = DateTimeOffset.UtcNow.AddHours(1).AddSeconds(3);   // the early-bird hour starts in ~3 seconds
         await _host.Scenario(s =>
         {
             s.Post.Json(new { checkId = "c7", ownerKey = "secret", venue = "The Library", revealAt = Iso(revealAt), at = Iso(DateTimeOffset.UtcNow) })
@@ -242,8 +242,41 @@ public class ApiTests : IAsyncLifetime
         {
             s.Post.Json(new { checkId = "c7", ownerKey = "secret", venue = "Elsewhere", revealAt = Iso(revealAt), at = Iso(DateTimeOffset.UtcNow) })
                 .ToUrl("/checks/c7/venue");
-            s.StatusCodeShouldBe(409);
+            s.StatusCodeShouldBe(204);   // still changeable: the reveal itself is an hour away
         });
-        (await DoorList("c7")).ShouldContain("\"venue\":\"The Library\"");
+        (await DoorList("c7")).ShouldContain("\"venue\":\"Elsewhere\"");
+    }
+
+    [Fact]
+    public async Task A_check_from_before_early_birds_shipped_remembers_who_changed_their_mind_after_startup()
+    {
+        // As the previous version left it: events, plus snapshots that never recorded Change My Mind.
+        var now = DateTimeOffset.UtcNow;
+        var on = new DateOnly(2026, 11, 4);
+        var store = _host.Services.GetRequiredService<IDocumentStore>();
+        await using (var session = store.LightweightSession())
+        {
+            session.Events.StartStream<InterestCheck>("c8",
+                new InterestCheckStarted("c8", "Board games", "", 1, null, OwnerKey.Hash("secret"), 5),
+                new InterestShown("c8", "p1", "Ana", null, on),
+                new InterestShown("c8", "p2", "Ben", null, on),
+                new InterestWithdrawn("c8", "p2", on),
+                new InterestShown("c8", "p2", "Ben", null, on),
+                new VenueSet("c8", "The Library", now.AddHours(1).AddSeconds(3), now));
+            await session.SaveChangesAsync();
+
+            session.QueueSqlCommand("update countmein.mt_doc_interestcheck set data = data - 'ChangedMind'");
+            session.QueueSqlCommand("update countmein.mt_doc_doorlist set data = data - 'ChangedMindIds'");
+            await session.SaveChangesAsync();
+        }
+
+        foreach (var service in _host.Services.GetServices<IHostedService>().OfType<RebuildStaleSnapshots>())
+            await service.StartAsync(CancellationToken.None);
+
+        await Task.Delay(4000);
+        Task<string> Ask(string person) => _host.Scenario(s => s.Get.Url($"/checks/c8/venue?personId={person}")).ContinueWith(t => t.Result.ReadAsText());
+        (await Ask("p1")).ShouldContain("The Library");
+        (await Ask("p2")).ShouldNotContain("The Library");
+        (await DoorList("c8")).ShouldContain("\"earlyBirds\":[\"Ana\"]");
     }
 }

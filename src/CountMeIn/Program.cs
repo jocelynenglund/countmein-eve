@@ -25,6 +25,7 @@ builder.Services.AddMarten(opts =>
 builder.Host.UseWolverine(opts => opts.Policies.UseDurableLocalQueues());
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<ScheduleReleases>();
+builder.Services.AddHostedService<RebuildStaleSnapshots>();
 builder.Services.AddWolverineHttp();
 
 var app = builder.Build();
