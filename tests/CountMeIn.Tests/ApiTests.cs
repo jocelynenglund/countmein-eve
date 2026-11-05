@@ -2,6 +2,8 @@ using Alba;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
+using Microsoft.Extensions.Hosting;
+using CountMeIn.Features;
 
 namespace CountMeIn.Tests;
 
@@ -128,5 +130,90 @@ public class ApiTests : IAsyncLifetime
         door.ShouldContain("\"checkedIn\":[{\"name\":\"Ana\"");
         door.ShouldContain("\"waitlist\":[\"Ben\"]");
         door.ShouldContain("\"turnedAway\":[{\"name\":\"Ben\"");
+    }
+
+    static string Iso(DateTimeOffset t) => t.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+    async Task<string> DoorList(string id) => (await _host.Scenario(s =>
+    {
+        s.WithRequestHeader("X-Owner-Key", "secret");
+        s.Get.Url($"/checks/{id}/door-list");
+    })).ReadAsText();
+
+    async Task<string> WaitForRelease(string id)
+    {
+        for (var i = 0; i < 40; i++)
+        {
+            var door = await DoorList(id);
+            if (!door.Contains("\"letInFromWaitlist\":[]")) return door;
+            await Task.Delay(500);
+        }
+        throw new TimeoutException("The release never happened");
+    }
+
+    [Fact]
+    public async Task The_release_happens_by_itself_when_the_last_ten_minutes_begin()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new
+            {
+                checkId = "c5", title = "Board games", goal = 1, ownerKey = "secret", on = "2026-11-04", capacity = 1,
+                doorsOpen = Iso(now.AddHours(-1)), doorsClose = Iso(now.AddMinutes(10).AddSeconds(3))   // release in ~3 seconds
+            }).ToUrl("/checks");
+            s.StatusCodeShouldBe(201);
+        });
+        await CountIn("c5", "p1", "Ana");
+        await CountIn("c5", "p2", "Ben");
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new { checkId = "c5", personId = "p2", at = Iso(now) }).ToUrl("/checks/c5/check-in");
+            s.StatusCodeShouldBe(409);   // waitlisted, remembered
+        });
+
+        var door = await WaitForRelease("c5");
+        door.ShouldContain("\"letInFromWaitlist\":[\"Ben\"]");
+        door.ShouldContain("\"lostTheirSpot\":[\"Ana\"]");
+
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new { checkId = "c5", personId = "p1", at = Iso(DateTimeOffset.UtcNow) }).ToUrl("/checks/c5/check-in");
+            s.StatusCodeShouldBe(409);   // Your spot went to the waitlist
+        });
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new { checkId = "c5", personId = "p2", at = Iso(DateTimeOffset.UtcNow) }).ToUrl("/checks/c5/check-in");
+            s.StatusCodeShouldBe(204);
+        });
+    }
+
+    [Fact]
+    public async Task A_check_from_before_this_shipped_is_picked_up_on_startup()
+    {
+        // A check as the previous version left it: events appended, no scheduled message, and a stored
+        // snapshot that knows nothing about who tried at the door.
+        var now = DateTimeOffset.UtcNow;
+        var store = _host.Services.GetRequiredService<IDocumentStore>();
+        await using (var session = store.LightweightSession())
+        {
+            session.Events.StartStream<InterestCheck>("c6",
+                new InterestCheckStarted("c6", "Board games", "", 1, null, OwnerKey.Hash("secret"), 1,
+                    now.AddHours(-1), now.AddMinutes(10).AddSeconds(3)),
+                new InterestShown("c6", "p1", "Ana", null, new DateOnly(2026, 11, 4)),
+                new InterestShown("c6", "p2", "Ben", null, new DateOnly(2026, 11, 4)),
+                new TurnedAwayAtDoor("c6", "p2", now));
+            await session.SaveChangesAsync();
+
+            session.QueueSqlCommand(
+                "update countmein.mt_doc_interestcheck set data = data - 'TriedAtDoor' - 'Released' - 'LetIn' - 'LostTheirSpot'");
+            await session.SaveChangesAsync();
+        }
+
+        foreach (var service in _host.Services.GetServices<IHostedService>().OfType<ScheduleReleases>())
+            await service.StartAsync(CancellationToken.None);
+
+        var door = await WaitForRelease("c6");
+        door.ShouldContain("\"letInFromWaitlist\":[\"Ben\"]");
     }
 }

@@ -34,8 +34,9 @@ public class InterestCheck
     }
 
     /// <summary>Ten minutes before the doors close, or when they open if the window is shorter than that.</summary>
-    public DateTimeOffset? ReleaseAt => DoorsClose is { } close ? Max(close.AddMinutes(-10), DoorsOpen!.Value) : null;
-    static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
+    public DateTimeOffset? ReleaseAt => DoorsOpen is { } open && DoorsClose is { } close ? ReleaseAtFor(open, close) : null;
+    public static DateTimeOffset ReleaseAtFor(DateTimeOffset open, DateTimeOffset close) =>
+        close.AddMinutes(-10) > open ? close.AddMinutes(-10) : open;
 
     /// <summary>People who neither lost their spot nor were let in keep their place in line; lost spots stay empty unless refilled.</summary>
     public bool IsWaitlisted(string personId) =>

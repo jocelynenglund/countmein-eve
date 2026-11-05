@@ -22,7 +22,9 @@ builder.Services.AddMarten(opts =>
     .UseLightweightSessions()
     .IntegrateWithWolverine();
 
-builder.Host.UseWolverine();
+builder.Host.UseWolverine(opts => opts.Policies.UseDurableLocalQueues());
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<ScheduleReleases>();
 builder.Services.AddWolverineHttp();
 
 var app = builder.Build();
