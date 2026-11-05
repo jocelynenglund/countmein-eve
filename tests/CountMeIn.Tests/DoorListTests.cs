@@ -35,4 +35,19 @@ public class DoorListTests
         var view = Fold.Of<DoorList>(Started(), Shown("p1", "Ana"), new CheckedIn("c1", "p1", At), Withdrawn("p1"))!;
         view.CheckedIn.ShouldBeEmpty();
     }
+
+    [Fact]
+    public void After_the_release_who_was_let_in_and_who_lost_their_spot()
+    {
+        var view = Fold.Of<DoorList>(Started(capacity: 2),
+            Shown("p1", "Ana"), Shown("p2", "Ben"), Shown("p3", "Dev"), Shown("p4", "Eli"),
+            new CheckedIn("c1", "p1", At), new TurnedAwayAtDoor("c1", "p3", At),
+            new UnclaimedSpotsReleased("c1", At.AddHours(1), ["p2"], ["p3"]))!;
+
+        view.LostTheirSpot.ShouldBe(["Ben"]);
+        view.LetInFromWaitlist.ShouldBe(["Dev"]);
+        view.CheckedIn.ShouldBe([new Arrival("Ana", At)]);
+        view.NotArrivedYet.ShouldBe(["Dev"]);
+        view.Waitlist.ShouldBe(["Eli"]);
+    }
 }
