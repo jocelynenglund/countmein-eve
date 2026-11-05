@@ -50,4 +50,13 @@ public class DoorListTests
         view.NotArrivedYet.ShouldBe(["Dev"]);
         view.Waitlist.ShouldBe(["Eli"]);
     }
+
+    [Fact]
+    public void The_door_list_shows_the_venue_and_when_it_is_revealed()
+    {
+        var revealAt = At.AddDays(1);
+        var view = Fold.Of<DoorList>(Started(), new VenueSet("c1", "The Library", revealAt, At))!;
+        view.Venue.ShouldBe("The Library");
+        view.RevealAt.ShouldBe(revealAt);
+    }
 }
