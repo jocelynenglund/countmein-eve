@@ -17,9 +17,17 @@ public class DoorList
     public List<Arrival> CheckedIn { get; set; } = [];
     public List<Arrival> TurnedAway { get; set; } = [];
 
-    public IEnumerable<Person> SpotHolders => People.Take(Capacity ?? int.MaxValue);
-    public List<string> NotArrivedYet => SpotHolders.Where(p => !Arrived.Contains(p.PersonId)).Select(p => p.Name).ToList();
-    public List<string> Waitlist => People.Skip(Capacity ?? int.MaxValue).Select(p => p.Name).ToList();
+    public List<string> LostTheirSpotIds { get; set; } = [];
+    public List<string> LetInIds { get; set; } = [];
+    public List<string> LostTheirSpot { get; set; } = [];
+    public List<string> LetInFromWaitlist { get; set; } = [];
+
+    // Spots lost at the release stay empty; the people let in hold the others' places in line.
+    List<Person> InLine => People.Where(p => !LostTheirSpotIds.Contains(p.PersonId) && !LetInIds.Contains(p.PersonId)).ToList();
+    int InLineSlots => (Capacity ?? int.MaxValue) - LostTheirSpotIds.Count;
+    public List<string> NotArrivedYet => People.Where(p => LetInIds.Contains(p.PersonId))
+        .Concat(InLine.Take(InLineSlots)).Where(p => !Arrived.Contains(p.PersonId)).Select(p => p.Name).ToList();
+    public List<string> Waitlist => InLine.Skip(InLineSlots).Select(p => p.Name).ToList();
 
     public static DoorList Create(InterestCheckStarted e) => new() { Id = e.CheckId, OwnerKeyHash = e.OwnerKeyHash, Capacity = e.Capacity };
 
@@ -39,12 +47,23 @@ public class DoorList
         CheckedIn.Add(new Arrival(person.Name, e.At));
     }
 
+    public void Apply(UnclaimedSpotsReleased e)
+    {
+        LostTheirSpotIds.AddRange(e.LostTheirSpot);
+        LetInIds.AddRange(e.LetIn);
+        LostTheirSpot.AddRange(NamesOf(e.LostTheirSpot));
+        LetInFromWaitlist.AddRange(NamesOf(e.LetIn));
+    }
+
+    IEnumerable<string> NamesOf(IEnumerable<string> ids) => ids.Select(id => People.First(p => p.PersonId == id).Name);
+
     public void Apply(TurnedAwayAtDoor e) =>
         TurnedAway.Add(new Arrival(People.First(p => p.PersonId == e.PersonId).Name, e.At));
 }
 
 public record DoorListResponse(IReadOnlyList<Arrival> CheckedIn, IReadOnlyList<string> NotArrivedYet,
-    IReadOnlyList<string> Waitlist, IReadOnlyList<Arrival> TurnedAway);
+    IReadOnlyList<string> Waitlist, IReadOnlyList<Arrival> TurnedAway,
+    IReadOnlyList<string> LetInFromWaitlist, IReadOnlyList<string> LostTheirSpot);
 
 public static class DoorListEndpoint
 {
@@ -52,6 +71,7 @@ public static class DoorListEndpoint
     public static DoorListResponse Get([Document("checkId")] DoorList view, [FromHeader(Name = "X-Owner-Key")] string? ownerKey)
     {
         if (!OwnerKey.Matches(ownerKey, view.OwnerKeyHash)) throw new Refusal("Only the owner can see this", 403);
-        return new DoorListResponse(view.CheckedIn, view.NotArrivedYet, view.Waitlist, view.TurnedAway);
+        return new DoorListResponse(view.CheckedIn, view.NotArrivedYet, view.Waitlist, view.TurnedAway,
+            view.LetInFromWaitlist, view.LostTheirSpot);
     }
 }

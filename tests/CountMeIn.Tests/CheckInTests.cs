@@ -76,4 +76,30 @@ public class CheckInTests
     [Fact]
     public void Already_checked_in() =>
         Refused("You're already checked in", "p1", Evening, Doors(), Shown("p1", "Ana"), new CheckedIn("c1", "p1", Evening));
+
+    static readonly DateTimeOffset Late = Close.AddMinutes(-5);
+    static UnclaimedSpotsReleased Released(string[] lost, string[] letIn) =>
+        new("c1", Close.AddMinutes(-10), lost, letIn);
+
+    [Fact]
+    public void A_spot_holder_who_arrives_after_the_release_is_refused() =>
+        Refused("Your spot went to the waitlist", "p1", Late, Doors(capacity: 1), Shown("p1", "Ana"), Shown("p2", "Ben"),
+            Released(["p1"], []));
+
+    [Fact]
+    public void Someone_let_in_from_the_waitlist_can_check_in()
+    {
+        var (_, events) = When("p2", Late, Doors(capacity: 1), Shown("p1", "Ana"), Shown("p2", "Ben"),
+            new TurnedAwayAtDoor("c1", "p2", Evening), Released(["p1"], ["p2"]));
+        events.ShouldBe([new CheckedIn("c1", "p2", Late)]);
+    }
+
+    [Fact]
+    public void Waitlisted_people_not_let_in_are_still_turned_away()
+    {
+        var (result, events) = When("p3", Late, Doors(capacity: 1), Shown("p1", "Ana"), Shown("p2", "Ben"), Shown("p3", "Dev"),
+            new TurnedAwayAtDoor("c1", "p2", Evening), Released(["p1"], ["p2"]));
+        result.ShouldBeOfType<ProblemHttpResult>().StatusCode.ShouldBe(409);
+        events.ShouldBe([new TurnedAwayAtDoor("c1", "p3", Late)]);
+    }
 }

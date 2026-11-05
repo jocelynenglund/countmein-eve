@@ -15,6 +15,8 @@ public static class CheckInEndpoint
         if (!check.PeopleIn.Contains(cmd.PersonId)) throw new Refusal("You're not on the list", 409);
         if (!check.DoorsAreOpen(cmd.At)) throw new Refusal("The doors aren't open", 409);
 
+        if (check.LostTheirSpot.Contains(cmd.PersonId)) throw new Refusal("Your spot went to the waitlist", 409);
+
         // The refusal is also a fact: the owner wants to know who turned up without a spot.
         if (check.IsWaitlisted(cmd.PersonId))
             return (Results.Problem("You're on the waitlist", statusCode: 409),

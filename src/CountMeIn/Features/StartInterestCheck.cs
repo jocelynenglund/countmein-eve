@@ -1,4 +1,5 @@
 using Marten.Events;
+using Wolverine;
 using Wolverine.Http;
 using Wolverine.Marten;
 
@@ -10,11 +11,17 @@ public record StartInterestCheck(string CheckId, string Title, string? Pitch, in
 public static class StartInterestCheckEndpoint
 {
     [WolverinePost("/checks")]
-    public static (CreationResponse, IStartStream) Post(StartInterestCheck cmd)
+    public static (CreationResponse, IStartStream, OutgoingMessages) Post(StartInterestCheck cmd)
     {
         var started = Decide(cmd);
+
+        // The release happens by itself: a durable scheduled message, due when the last ten minutes begin.
+        var later = new OutgoingMessages();
+        if (started is { Capacity: not null, DoorsOpen: { } open, DoorsClose: { } close })
+            later.Add(new ReleaseUnclaimedSpots(cmd.CheckId).ScheduledAt(InterestCheck.ReleaseAtFor(open, close)));
+
         return (new CreationResponse($"/checks/{cmd.CheckId}/pitch"),
-            MartenOps.StartStream<InterestCheck>(cmd.CheckId, started));
+            MartenOps.StartStream<InterestCheck>(cmd.CheckId, started), later);
     }
 
     public static InterestCheckStarted Decide(StartInterestCheck cmd)
