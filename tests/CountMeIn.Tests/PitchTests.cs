@@ -34,4 +34,33 @@ public class PitchTests
         pitch.Open.ShouldBeFalse();
         pitch.ClosesOn.ShouldBe(closesOn);
     }
+
+    [Fact]
+    public void Unlimited_has_no_spots_left_and_no_waitlist()
+    {
+        var pitch = Fold.Of<Pitch>(Started(), Shown("p1", "Ana"))!;
+        pitch.SpotsLeft.ShouldBeNull();
+        pitch.WaitlistCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Spots_left_count_down_to_zero_then_the_waitlist_grows()
+    {
+        var pitch = Fold.Of<Pitch>(Started(capacity: 2), Shown("p1", "Ana"))!;
+        pitch.SpotsLeft.ShouldBe(1);
+        pitch.WaitlistCount.ShouldBe(0);
+
+        pitch = Fold.Of<Pitch>(Started(capacity: 2), Shown("p1", "Ana"), Shown("p2", "Ben"), Shown("p3", "Dev"))!;
+        pitch.SpotsLeft.ShouldBe(0);
+        pitch.WaitlistCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public void When_a_spot_holder_leaves_the_waitlist_shrinks()
+    {
+        var pitch = Fold.Of<Pitch>(Started(capacity: 2),
+            Shown("p1", "Ana"), Shown("p2", "Ben"), Shown("p3", "Dev"), Withdrawn("p1"))!;
+        pitch.SpotsLeft.ShouldBe(0);
+        pitch.WaitlistCount.ShouldBe(0);
+    }
 }
