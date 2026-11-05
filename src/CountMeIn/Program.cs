@@ -17,6 +17,7 @@ builder.Services.AddMarten(opts =>
         opts.Projections.Snapshot<InterestCheck>(SnapshotLifecycle.Inline);
         opts.Projections.Snapshot<Pitch>(SnapshotLifecycle.Inline);
         opts.Projections.Snapshot<HowItsGoing>(SnapshotLifecycle.Inline);
+        opts.Projections.Snapshot<DoorList>(SnapshotLifecycle.Inline);
     })
     .UseLightweightSessions()
     .IntegrateWithWolverine();

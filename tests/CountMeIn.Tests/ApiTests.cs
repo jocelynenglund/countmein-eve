@@ -88,4 +88,45 @@ public class ApiTests : IAsyncLifetime
         (await _host.Scenario(s => s.Get.Url("/checks/c3/pitch"))).ReadAsText().ShouldContain("\"open\":false");
         await CountIn("c3", "p9", "Late", status: 409);
     }
+
+    [Fact]
+    public async Task Door_night_check_in_waitlist_and_turn_away()
+    {
+        await _host.Scenario(s =>
+        {
+            s.Post.Json(new
+            {
+                checkId = "c4", title = "Board games", goal = 1, ownerKey = "secret", on = "2026-11-04", capacity = 1,
+                doorsOpen = "2026-11-14T18:00:00Z", doorsClose = "2026-11-14T20:00:00Z"
+            }).ToUrl("/checks");
+            s.StatusCodeShouldBe(201);
+        });
+        await CountIn("c4", "p1", "Ana");
+        await CountIn("c4", "p2", "Ben");
+
+        Task CheckIn(string person, string at, int status) => _host.Scenario(s =>
+        {
+            s.Post.Json(new { checkId = "c4", personId = person, at }).ToUrl("/checks/c4/check-in");
+            s.StatusCodeShouldBe(status);
+        });
+
+        await CheckIn("p1", "2026-11-14T17:00:00Z", 409);   // doors not open yet
+        await CheckIn("p1", "2026-11-14T18:30:00Z", 204);
+        await CheckIn("p2", "2026-11-14T18:40:00Z", 409);   // waitlisted: refused, but remembered
+        await CheckIn("p9", "2026-11-14T18:40:00Z", 409);   // not on the list
+
+        var pitch = (await _host.Scenario(s => s.Get.Url("/checks/c4/pitch"))).ReadAsText();
+        pitch.ShouldContain("\"spotsLeft\":0");
+        pitch.ShouldContain("\"waitlistCount\":1");
+
+        await _host.Scenario(s => { s.Get.Url("/checks/c4/door-list"); s.StatusCodeShouldBe(403); });
+        var door = (await _host.Scenario(s =>
+        {
+            s.WithRequestHeader("X-Owner-Key", "secret");
+            s.Get.Url("/checks/c4/door-list");
+        })).ReadAsText();
+        door.ShouldContain("\"checkedIn\":[{\"name\":\"Ana\"");
+        door.ShouldContain("\"waitlist\":[\"Ben\"]");
+        door.ShouldContain("\"turnedAway\":[{\"name\":\"Ben\"");
+    }
 }
