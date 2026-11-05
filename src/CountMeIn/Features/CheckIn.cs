@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+
 using Wolverine.Http;
 using Wolverine.Marten;
 
@@ -9,7 +9,7 @@ public record CheckIn(string CheckId, string PersonId, DateTimeOffset At);
 public static class CheckInEndpoint
 {
     [WolverinePost("/checks/{checkId}/check-in")]
-    public static (ProblemDetails, Events) Handle(CheckIn cmd, [WriteAggregate("checkId", Required = false)] InterestCheck? check)
+    public static (IResult, Events) Handle(CheckIn cmd, [WriteAggregate("checkId", Required = false)] InterestCheck? check)
     {
         if (check is null) throw new Refusal("No such interest check", 404);
         if (!check.PeopleIn.Contains(cmd.PersonId)) throw new Refusal("You're not on the list", 409);
@@ -17,11 +17,11 @@ public static class CheckInEndpoint
 
         // The refusal is also a fact: the owner wants to know who turned up without a spot.
         if (check.IsWaitlisted(cmd.PersonId))
-            return (new ProblemDetails { Status = 409, Detail = "You're on the waitlist" },
+            return (Results.Problem("You're on the waitlist", statusCode: 409),
                 [new TurnedAwayAtDoor(check.Id, cmd.PersonId, cmd.At)]);
 
         if (check.CheckedIn.Contains(cmd.PersonId)) throw new Refusal("You're already checked in", 409);
 
-        return (WolverineContinue.NoProblems, [new CheckedIn(check.Id, cmd.PersonId, cmd.At)]);
+        return (Results.NoContent(), [new CheckedIn(check.Id, cmd.PersonId, cmd.At)]);
     }
 }
