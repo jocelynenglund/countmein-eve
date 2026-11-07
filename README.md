@@ -26,7 +26,7 @@ Behaviour comes from `/data/projects/count-me-in` (its plan and Given/When/Then 
 
 Needs Postgres on `localhost:5436` (database `countmein_eve`, password `countmein`):
 
-    docker run -d --name countmein-eve-db -e POSTGRES_PASSWORD=countmein -p 5436:5432 postgres:17
+    docker run -d --name countmein-eve-db -e POSTGRES_PASSWORD=countmein -p 127.0.0.1:5436:5432 postgres:17
     docker exec countmein-eve-db psql -U postgres -c 'create database countmein_eve'
     dotnet test
 
